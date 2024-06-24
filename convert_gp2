@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Function to display progress
+show_progress() {
+  local total=$1
+  local current=$2
+  local progress=$(( (current * 100) / total ))
+  echo -ne "Progress: [${current}/${total}] ${progress}%\r"
+}
+
+# Set AWS region
+REGION="us-east-1"
+
+# Get the list of all gp2 volumes in the specified region
+VOLUMES=$(aws ec2 describe-volumes --region "$REGION" --filters Name=volume-type,Values=gp2 --query "Volumes[*].VolumeId" --output text)
+
+# Convert volumes to an array
+VOLUME_ARRAY=($VOLUMES)
+
+# Get the total number of volumes to be converted
+TOTAL_VOLUMES=${#VOLUME_ARRAY[@]}
+
+# Check if there are any gp2 volumes
+if [ $TOTAL_VOLUMES -eq 0 ]; then
+  echo "No gp2 volumes found in the region $REGION."
+  exit 0
+fi
+
+echo "Found $TOTAL_VOLUMES gp2 volumes in the region $REGION. Starting conversion to gp3..."
+
+# Initialize the counter for converted volumes
+CONVERTED_COUNT=0
+
+# Iterate through each volume and convert it to gp3
+for VOLUME_ID in "${VOLUME_ARRAY[@]}"; do
+  # Convert the volume to gp3
+  aws ec2 modify-volume --region "$REGION" --volume-id "$VOLUME_ID" --volume-type gp3 > /dev/null 2>&1
+
+  # Increment the converted count
+  ((CONVERTED_COUNT++))
+
+  # Display the progress
+  show_progress $TOTAL_VOLUMES $CONVERTED_COUNT
+
+  # Wait for a few seconds to avoid API rate limits
+  sleep 2
+done
+
+echo -e "\nAll volumes have been successfully converted to gp3."
